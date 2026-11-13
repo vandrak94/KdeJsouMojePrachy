@@ -18,6 +18,11 @@
             <artifactId>sqlite-jdbc</artifactId>
             <version>3.51.0.0</version>
         </dependency>
+        <dependency>
+            <groupId>com.formdev</groupId>
+            <artifactId>flatlaf</artifactId>
+            <version>3.5.4</version>
+        </dependency>
     </dependencies>
 
     <build>
