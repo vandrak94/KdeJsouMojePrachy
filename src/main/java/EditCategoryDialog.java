@@ -9,7 +9,6 @@ import java.awt.Insets;
 import java.awt.Window;
 import java.sql.SQLException;
 import java.util.regex.Pattern;
-
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JColorChooser;
@@ -26,7 +25,6 @@ import javax.swing.event.DocumentListener;
 public final class EditCategoryDialog extends JDialog {
     private static final Pattern NAME_PATTERN = Pattern.compile("\\p{L}+(?: \\p{L}+)*");
     private static final Pattern COLOR_PATTERN = Pattern.compile("#[0-9A-Fa-f]{6}");
-
     private final int categoryId;
     private final JTextField nameField = new JTextField(24);
     private final JTextField colorField = new JTextField(10);
@@ -38,23 +36,20 @@ public final class EditCategoryDialog extends JDialog {
         categoryId = category.id();
         nameField.setText(category.name());
         colorField.setText(category.color());
-
         setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
         setResizable(true);
         setLayout(new BorderLayout(0, 12));
         add(createForm(), BorderLayout.CENTER);
         add(createButtons(), BorderLayout.SOUTH);
-
         updateColorPreview();
         pack();
+        setMinimumSize(new Dimension(Math.max(480, getWidth()), Math.max(240, getHeight())));
         DialogSizePreferences.restoreAndTrack(this, "editCategory");
         setLocationRelativeTo(owner);
         SwingUtilities.invokeLater(nameField::requestFocusInWindow);
     }
 
-    public boolean isSaved() {
-        return saved;
-    }
+    public boolean isSaved() { return saved; }
 
     private JPanel createForm() {
         JPanel form = new JPanel(new GridBagLayout());
@@ -62,7 +57,6 @@ public final class EditCategoryDialog extends JDialog {
         GridBagConstraints c = new GridBagConstraints();
         c.insets = new Insets(5, 5, 5, 5);
         c.anchor = GridBagConstraints.WEST;
-
         c.gridx = 0;
         c.gridy = 0;
         form.add(new JLabel("Název:"), c);
@@ -70,13 +64,11 @@ public final class EditCategoryDialog extends JDialog {
         c.fill = GridBagConstraints.HORIZONTAL;
         c.weightx = 1.0;
         form.add(nameField, c);
-
         c.gridx = 0;
         c.gridy = 1;
         c.fill = GridBagConstraints.NONE;
         c.weightx = 0;
         form.add(new JLabel("Barva:"), c);
-
         JPanel colorPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         colorPanel.add(colorField);
         colorPickerButton.setPreferredSize(new Dimension(34, 24));
@@ -87,7 +79,6 @@ public final class EditCategoryDialog extends JDialog {
         c.fill = GridBagConstraints.HORIZONTAL;
         c.weightx = 1.0;
         form.add(colorPanel, c);
-
         colorField.getDocument().addDocumentListener(new DocumentListener() {
             public void insertUpdate(DocumentEvent event) { updateColorPreview(); }
             public void removeUpdate(DocumentEvent event) { updateColorPreview(); }

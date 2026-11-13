@@ -1,17 +1,9 @@
 import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
-import java.awt.Insets;
-import java.awt.LinearGradientPaint;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Frame;
-import java.awt.Window;
 import java.sql.SQLException;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -21,24 +13,22 @@ import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import javax.swing.JTabbedPane;
 import javax.swing.JScrollPane;
-import javax.swing.SwingConstants;
+import javax.swing.JTabbedPane;
 import javax.swing.WindowConstants;
 
 public final class SettingsDialog extends JDialog {
     private JPanel categoryLabels;
+
     public SettingsDialog(Frame owner) {
         super(owner, "Nastavení", true);
         setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
         setMinimumSize(new Dimension(560, 380));
         setLayout(new BorderLayout());
-
         JTabbedPane tabs = new JTabbedPane();
         tabs.addTab("Databáze", createDatabaseTab());
         tabs.addTab("Kategorie", createCategoryTab());
         add(tabs, BorderLayout.CENTER);
-
         pack();
         DialogSizePreferences.restoreAndTrack(this, "settings");
         setLocationRelativeTo(owner);
@@ -48,25 +38,20 @@ public final class SettingsDialog extends JDialog {
         JPanel panel = createTabPanel("Databáze");
         JPanel controls = new JPanel();
         controls.setLayout(new BoxLayout(controls, BoxLayout.Y_AXIS));
-
         JButton browserButton = new JButton("Prohlížeč databáze");
         browserButton.setAlignmentX(LEFT_ALIGNMENT);
         browserButton.addActionListener(event -> new DatabaseBrowser(this).setVisible(true));
-
         JButton expensesButton = new JButton("Vyčistit tabulku Výdaje");
         expensesButton.setAlignmentX(LEFT_ALIGNMENT);
         expensesButton.addActionListener(event -> confirmAndClear(true));
-
         JButton categoriesButton = new JButton("Vyčistit tabulku Kategorie");
         categoriesButton.setAlignmentX(LEFT_ALIGNMENT);
         categoriesButton.addActionListener(event -> confirmAndClear(false));
-
         controls.add(browserButton);
         controls.add(Box.createVerticalStrut(10));
         controls.add(expensesButton);
         controls.add(Box.createVerticalStrut(10));
         controls.add(categoriesButton);
-
         JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         top.add(controls);
         panel.add(top, BorderLayout.CENTER);
@@ -76,19 +61,16 @@ public final class SettingsDialog extends JDialog {
     private JPanel createCategoryTab() {
         JPanel panel = createTabPanel("Kategorie");
         JPanel content = new JPanel(new BorderLayout(0, 12));
-
-        JButton addButton = new JButton("+");
+        JButton addButton = new JButton("Přidat kategorii");
         addButton.setToolTipText("Přidat kategorii");
         addButton.getAccessibleContext().setAccessibleName("Přidat kategorii");
         addButton.addActionListener(event -> {
             new AddCategoryDialog(this).setVisible(true);
             refreshCategoryLabels();
         });
-
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         controls.add(addButton);
         content.add(controls, BorderLayout.NORTH);
-
         categoryLabels = new JPanel();
         categoryLabels.setLayout(new BoxLayout(categoryLabels, BoxLayout.Y_AXIS));
         categoryLabels.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
@@ -109,7 +91,7 @@ public final class SettingsDialog extends JDialog {
         try {
             for (DatabaseManipulator.Category category : DatabaseManipulator.getCategories()) {
                 categoryLabels.add(createCategoryRow(category));
-                categoryLabels.add(Box.createVerticalStrut(8));
+                categoryLabels.add(Box.createVerticalStrut(7));
             }
         } catch (SQLException exception) {
             JOptionPane.showMessageDialog(this,
@@ -122,32 +104,35 @@ public final class SettingsDialog extends JDialog {
 
     private JPanel createCategoryRow(DatabaseManipulator.Category category) {
         Color background = parseCategoryColor(category.color());
-        JPanel row = new JPanel(new BorderLayout(10, 0));
-        row.setAlignmentX(LEFT_ALIGNMENT);
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
-
-        JLabel badge = new GlossLabel(category.name(), background);
         double luminance = 0.2126 * background.getRed()
                 + 0.7152 * background.getGreen() + 0.0722 * background.getBlue();
-        badge.setForeground(luminance < 145 ? Color.WHITE : Color.BLACK);
-        badge.setBorder(BorderFactory.createCompoundBorder(
+        JPanel row = new JPanel(new BorderLayout(12, 0));
+        row.setOpaque(true);
+        row.setBackground(background);
+        row.setAlignmentX(LEFT_ALIGNMENT);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 46));
+        row.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(background.darker(), 1, true),
-                BorderFactory.createEmptyBorder(9, 14, 9, 14)));
-        row.add(badge, BorderLayout.CENTER);
-
-        JButton editButton = new JButton("Upravit");
+                BorderFactory.createEmptyBorder(10, 14, 10, 14)));
+        JLabel name = new JLabel(category.name());
+        name.setForeground(luminance < 145 ? Color.WHITE : Color.BLACK);
+        row.add(name, BorderLayout.CENTER);
+        JButton editButton = new JButton("✎");
         editButton.setToolTipText("Upravit kategorii");
+        editButton.setFocusable(false);
+        editButton.getAccessibleContext().setAccessibleName("Upravit kategorii");
         editButton.addActionListener(event -> {
             EditCategoryDialog dialog = new EditCategoryDialog(this, category);
             dialog.setVisible(true);
             if (dialog.isSaved()) refreshCategoryLabels();
         });
-
-        JButton deleteButton = new JButton("-");
+        JButton deleteButton = new JButton("🗑");
         deleteButton.setToolTipText("Odstranit kategorii");
+        deleteButton.setFocusable(false);
+        deleteButton.getAccessibleContext().setAccessibleName("Odstranit kategorii");
         deleteButton.addActionListener(event -> deleteCategory(category));
-
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 4));
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        actions.setOpaque(false);
         actions.add(editButton);
         actions.add(deleteButton);
         row.add(actions, BorderLayout.EAST);
@@ -155,14 +140,24 @@ public final class SettingsDialog extends JDialog {
     }
 
     private void deleteCategory(DatabaseManipulator.Category category) {
-        Object[] options = {"Ano", "Ne"};
-        int answer = JOptionPane.showOptionDialog(this,
-                "Opravdu smazat kategorii?", "Potvrzení",
-                JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
-                null, options, options[1]);
-        if (answer != JOptionPane.YES_OPTION) return;
         try {
-            DatabaseManipulator.deleteCategory(category.id());
+            if (DatabaseManipulator.isCategoryUsed(category.id())) {
+                JOptionPane.showMessageDialog(this,
+                        "Kategorii nelze odstranit, protože je použita u některého výdaje.",
+                        "Kategorie je používána", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            Object[] options = {"Ano", "Ne"};
+            int answer = JOptionPane.showOptionDialog(this,
+                    "Opravdu smazat kategorii?", "Potvrzení",
+                    JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
+                    null, options, options[1]);
+            if (answer != JOptionPane.YES_OPTION) return;
+            if (!DatabaseManipulator.deleteCategory(category.id())) {
+                JOptionPane.showMessageDialog(this,
+                        "Kategorii nelze odstranit. Může být použita u některého výdaje.",
+                        "Kategorie nebyla odstraněna", JOptionPane.WARNING_MESSAGE);
+            }
             refreshCategoryLabels();
         } catch (SQLException exception) {
             JOptionPane.showMessageDialog(this,
@@ -174,36 +169,9 @@ public final class SettingsDialog extends JDialog {
     private static Color parseCategoryColor(String value) {
         try {
             return value != null && value.matches("#[0-9a-fA-F]{6}")
-                    ? Color.decode(value) : Color.GRAY;
+                    ? Color.decode(value) : new Color(225, 225, 225);
         } catch (NumberFormatException exception) {
-            return Color.GRAY;
-        }
-    }
-
-    private static final class GlossLabel extends JLabel {
-        private final Color baseColor;
-
-        private GlossLabel(String text, Color baseColor) {
-            super(text);
-            this.baseColor = baseColor;
-            setOpaque(false);
-        }
-
-        @Override
-        protected void paintComponent(Graphics graphics) {
-            Graphics2D g = (Graphics2D) graphics.create();
-            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                    RenderingHints.VALUE_ANTIALIAS_ON);
-            Color top = new Color(
-                    Math.min(255, baseColor.getRed() + 45),
-                    Math.min(255, baseColor.getGreen() + 45),
-                    Math.min(255, baseColor.getBlue() + 45));
-            g.setPaint(new LinearGradientPaint(0, 0, 0, getHeight(),
-                    new float[] {0f, 0.48f, 1f},
-                    new Color[] {top, baseColor, baseColor.darker()}));
-            g.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
-            g.dispose();
-            super.paintComponent(graphics);
+            return new Color(225, 225, 225);
         }
     }
 
@@ -222,9 +190,7 @@ public final class SettingsDialog extends JDialog {
         int answer = JOptionPane.showOptionDialog(this, "Opravdu vymazat?", "Potvrzení",
                 JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE,
                 null, options, options[1]);
-        if (answer != JOptionPane.YES_OPTION) {
-            return;
-        }
+        if (answer != JOptionPane.YES_OPTION) return;
         try {
             if (expenses) {
                 DatabaseManipulator.clearExpenses();

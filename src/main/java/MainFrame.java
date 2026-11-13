@@ -9,7 +9,6 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.DayOfWeek;
 import java.time.temporal.TemporalAdjusters;
-
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -42,7 +41,6 @@ public final class MainFrame extends JFrame {
         rangeComboBox.setFocusable(false);
         rangeComboBox.setPreferredSize(new Dimension(105, 30));
         rangeComboBox.addActionListener(event -> rangeChanged());
-
         updateCalendarButton();
         calendarButton.setToolTipText("Vybrat období z kalendáře");
         calendarButton.setPreferredSize(new Dimension(185, 30));
@@ -56,7 +54,7 @@ public final class MainFrame extends JFrame {
         settingsButton.setMargin(new Insets(2, 8, 2, 8));
         settingsButton.setFocusable(false);
         settingsButton.getAccessibleContext().setAccessibleName("Nastavení");
-        settingsButton.addActionListener(event -> new SettingsDialog(this).setVisible(true));
+        settingsButton.addActionListener(event -> openSettings());
         settingsButton.setPreferredSize(new Dimension(40, 30));
 
         JPanel leftControls = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
@@ -82,6 +80,13 @@ public final class MainFrame extends JFrame {
             Image image = new ImageIcon(resource).getImage();
             setIconImage(image);
         }
+    }
+
+    private void openSettings() {
+        // SettingsDialog is modal: execution resumes after the dialog closes.
+        new SettingsDialog(this).setVisible(true);
+        // Reload category names, colors, totals, and the chart for the same period.
+        overview.showPeriod((String) rangeComboBox.getSelectedItem(), selectedDate);
     }
 
     private void addExpense() {

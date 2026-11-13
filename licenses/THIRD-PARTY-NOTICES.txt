@@ -1,0 +1,33 @@
+Kde jsou moje prachy? - third-party software notices
+====================================================
+
+This distribution includes free and open-source components. Their copyright,
+license and notice files are supplied alongside this document in the licenses/
+folder. The build script copies the exact texts embedded in the runtime JARs
+and the JDK's legal/ directory.
+
+Components used directly by the project:
+
+* FlatLaf (com.formdev:flatlaf) - Apache License 2.0
+  https://github.com/JFormDesigner/FlatLaf
+* Xerial SQLite JDBC (org.xerial:sqlite-jdbc) - Apache License 2.0,
+  BSD-2-Clause and applicable third-party notices
+  https://github.com/xerial/sqlite-jdbc
+* SQLite database engine - public domain
+  https://www.sqlite.org/copyright.html
+* Java / Eclipse Temurin OpenJDK runtime - GPL version 2 with Classpath
+  Exception and additional third-party licenses in the JDK legal/ directory
+  https://adoptium.net/
+
+Additional transitive dependencies may be included. See BUNDLED-JARS.txt and
+java-libraries/ for the exact runtime JAR inventory and their bundled notices.
+The runtime JDK's legal files are copied to openjdk-legal/.
+
+Redistribution checklist:
+1. Check the exact versions of all runtime dependencies and the JDK.
+2. Verify that each dependency's required LICENSE and NOTICE files are present.
+3. Check applicable source-code offer/source availability obligations for the
+   bundled JDK and other copyleft components, if any.
+4. Preserve this directory when distributing the EXE or portable ZIP.
+
+This document is an inventory, not a replacement for license terms or legal advice.
