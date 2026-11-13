@@ -2,12 +2,15 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Image;
 import java.awt.Insets;
+import java.net.URL;
 import java.time.LocalDate;
-import java.time.DayOfWeek;
 import java.time.format.DateTimeFormatter;
+import java.time.DayOfWeek;
 import java.time.temporal.TemporalAdjusters;
 
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JFrame;
@@ -20,7 +23,6 @@ import javax.swing.WindowConstants;
 /** Hlavní okno aplikace včetně jeho ovládacích prvků a akcí. */
 public final class MainFrame extends JFrame {
     private static final String APP_TITLE = "Kde jsou moje prachy?";
-
     private final OverviewPanel overview = new OverviewPanel();
     private final JComboBox<String> rangeComboBox = new JComboBox<>(
             new String[] {"Den", "Týden", "Měsíc", "Rok"});
@@ -32,10 +34,10 @@ public final class MainFrame extends JFrame {
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         setMinimumSize(new Dimension(960, 620));
         setLayout(new BorderLayout());
+        applyApplicationIcon();
 
         JPanel toolbar = new JPanel(new BorderLayout());
         toolbar.setBorder(javax.swing.BorderFactory.createEmptyBorder(4, 8, 4, 8));
-
         JLabel rangeLabel = new JLabel("Rozsah:");
         rangeComboBox.setFocusable(false);
         rangeComboBox.setPreferredSize(new Dimension(105, 30));
@@ -72,6 +74,14 @@ public final class MainFrame extends JFrame {
         add(overview, BorderLayout.CENTER);
         setSize(1100, 720);
         setLocationRelativeTo(null);
+    }
+
+    private void applyApplicationIcon() {
+        URL resource = MainFrame.class.getResource("/app-icon.png");
+        if (resource != null) {
+            Image image = new ImageIcon(resource).getImage();
+            setIconImage(image);
+        }
     }
 
     private void addExpense() {
