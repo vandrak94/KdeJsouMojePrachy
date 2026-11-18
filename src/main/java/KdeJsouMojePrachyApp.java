@@ -15,7 +15,15 @@ public final class KdeJsouMojePrachyApp {
             UIManager.put("ScrollBar.width", 12);
             try {
                 DatabaseManipulator.initializeDatabase();
-                new MainFrame().setVisible(true);
+                MainFrame mainFrame = new MainFrame();
+                mainFrame.setVisible(true);
+                if (CategoryColorUniqueness.hasDuplicates()) {
+                    JOptionPane.showMessageDialog(mainFrame,
+                            "Některé kategorie používají stejnou barvu.\n"
+                                    + "Před pokračováním nastavte každé kategorii jedinečnou barvu.",
+                            "Duplicitní barvy kategorií", JOptionPane.WARNING_MESSAGE);
+                    new SettingsDialog(mainFrame, true).setVisible(true);
+                }
             } catch (Exception exception) {
                 JOptionPane.showMessageDialog(null,
                         "Aplikaci se nepodařilo spustit.\n" + exception.getMessage(),
