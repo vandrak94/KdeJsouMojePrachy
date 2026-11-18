@@ -1,18 +1,12 @@
-import com.formdev.flatlaf.FlatLightLaf;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
 
 public final class KdeJsouMojePrachyApp {
     private KdeJsouMojePrachyApp() { }
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
-            FlatLightLaf.setup();
-            UIManager.put("Button.arc", 14);
-            UIManager.put("Component.arc", 14);
-            UIManager.put("TextComponent.arc", 14);
-            UIManager.put("ScrollBar.width", 12);
+            AppearanceManager.applySaved();
             try {
                 DatabaseManipulator.initializeDatabase();
                 MainFrame mainFrame = new MainFrame();

@@ -19,12 +19,13 @@ public final class SettingsDialog extends JDialog {
         setDefaultCloseOperation(forcedCategoryRepair ? DO_NOTHING_ON_CLOSE : DISPOSE_ON_CLOSE);
         setMinimumSize(new Dimension(650, 470));
         setLayout(new BorderLayout());
+        tabs.addTab("Vzhled", createAppearanceTab());
         tabs.addTab("Databáze", createDatabaseTab());
         tabs.addTab("Kategorie", createCategoryTab());
         add(tabs, BorderLayout.CENTER);
         if (forcedCategoryRepair) {
-            tabs.setSelectedIndex(1);
-            tabs.setEnabledAt(0, false);
+            tabs.setSelectedIndex(2);
+            tabs.setEnabledAt(1, false);
             addWindowListener(new WindowAdapter() {
                 @Override public void windowClosing(WindowEvent e) {
                     if (duplicatesRemain) JOptionPane.showMessageDialog(SettingsDialog.this,
@@ -37,6 +38,20 @@ public final class SettingsDialog extends JDialog {
         pack();
         DialogSizePreferences.restoreAndTrack(this, "settings");
         setLocationRelativeTo(owner);
+    }
+
+    private JPanel createAppearanceTab() {
+        JPanel panel = createTabPanel("Vzhled aplikace");
+        JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        controls.add(new JLabel("Režim:"));
+        JComboBox<String> selector = new JComboBox<>(new String[] {
+                "Automatický (podle Windows)", "Světlý", "Tmavý" });
+        selector.setSelectedIndex(AppearanceManager.getMode().ordinal());
+        selector.addActionListener(e -> AppearanceManager.setMode(
+                AppearanceManager.Mode.values()[selector.getSelectedIndex()]));
+        controls.add(selector);
+        panel.add(controls, BorderLayout.CENTER);
+        return panel;
     }
 
     private JPanel createDatabaseTab() {
@@ -91,7 +106,7 @@ public final class SettingsDialog extends JDialog {
             }
             if (forcedCategoryRepair && !duplicatesRemain) {
                 setDefaultCloseOperation(DISPOSE_ON_CLOSE);
-                tabs.setEnabledAt(0, true);
+                tabs.setEnabledAt(1, true);
             }
         } catch (SQLException ex) {
             duplicatesRemain = forcedCategoryRepair;
@@ -151,8 +166,8 @@ public final class SettingsDialog extends JDialog {
     }
 
     private static Color parseColor(String value) {
-        try { return value != null && value.matches("#[0-9a-fA-F]{6}") ? Color.decode(value) : new Color(225,225,225); }
-        catch (NumberFormatException ex) { return new Color(225,225,225); }
+        try { return value != null && value.matches("#[0-9a-fA-F]{6}") ? Color.decode(value) : javax.swing.UIManager.getColor("Panel.background"); }
+        catch (NumberFormatException ex) { return javax.swing.UIManager.getColor("Panel.background"); }
     }
 
     private static JPanel createTabPanel(String title) {

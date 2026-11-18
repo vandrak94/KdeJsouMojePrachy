@@ -90,7 +90,7 @@ public final class OverviewPanel extends JPanel {
         overviewContent.add(scrollPane, BorderLayout.CENTER);
         JPanel chartContainer = new JPanel(new BorderLayout());
         chartContainer.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(210, 210, 210), 1, true),
+                BorderFactory.createLineBorder(javax.swing.UIManager.getColor("Component.borderColor"), 1, true),
                 BorderFactory.createEmptyBorder(8, 8, 8, 8)));
         setupFilter();
         JPanel filterHeader = new JPanel(new BorderLayout(10, 0));
@@ -372,10 +372,8 @@ public final class OverviewPanel extends JPanel {
                 int centerX = x + size / 2;
                 int centerY = y + size / 2;
                 int halfCross = 3;
-
                 g.drawLine(centerX - halfCross, centerY - halfCross,
                         centerX + halfCross, centerY + halfCross);
-
                 g.drawLine(centerX + halfCross, centerY - halfCross,
                         centerX - halfCross, centerY + halfCross);
             } finally { g.dispose(); }
@@ -488,9 +486,9 @@ public final class OverviewPanel extends JPanel {
     private static Color parseColor(String value) {
         try {
             return value != null && value.matches("#[0-9a-fA-F]{6}")
-                    ? Color.decode(value) : new Color(225, 225, 225);
+                    ? Color.decode(value) : javax.swing.UIManager.getColor("Panel.background");
         } catch (NumberFormatException exception) {
-            return new Color(225, 225, 225);
+            return javax.swing.UIManager.getColor("Panel.background");
         }
     }
 

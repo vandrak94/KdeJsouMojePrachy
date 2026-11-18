@@ -17,6 +17,7 @@ import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingConstants;
+import javax.swing.UIManager;
 
 /** Kalendářový výběr období omezený na 17. 11. 1989 až současnost. */
 public final class RangeSelectionDialog extends JDialog {
@@ -189,7 +190,10 @@ public final class RangeSelectionDialog extends JDialog {
         JButton button = new JButton(label);
         button.setEnabled(enabled);
         LocalDate normalized = normalize(date);
-        if (normalized.equals(normalize(view))) button.setBackground(new Color(191, 219, 254));
+        if (normalized.equals(normalize(view))) {
+            button.setBackground(UIManager.getColor("List.selectionBackground"));
+            button.setForeground(UIManager.getColor("List.selectionForeground"));
+        }
         button.addActionListener(e -> {
             selectedDate = normalized;
             dispose();

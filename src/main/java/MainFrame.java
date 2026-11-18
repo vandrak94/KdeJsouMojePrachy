@@ -94,6 +94,7 @@ public final class MainFrame extends JFrame {
         add(overview, BorderLayout.CENTER);
         setSize(1100, 720);
         setLocationRelativeTo(null);
+        setExtendedState(JFrame.MAXIMIZED_BOTH);
     }
 
     private void configurePeriodButton(JButton button, String tooltip, int direction) {

@@ -76,7 +76,7 @@ public final class PieChartPanel extends JPanel {
             ChartLayout layout = calculateLayout();
             BigDecimal total = getPositiveTotal();
             if (total.signum() == 0) {
-                g.setColor(Color.GRAY);
+                g.setColor(getForeground());
                 String message = "Žádná data pro graf";
                 FontMetrics metrics = g.getFontMetrics();
                 g.drawString(message, (getWidth() - metrics.stringWidth(message)) / 2,
