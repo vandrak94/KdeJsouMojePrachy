@@ -55,6 +55,7 @@ public final class RangeSelectionDialog extends JDialog {
             for (int i = 1; i <= 12; i++) {
                 monthNames[i - 1] = LocalDate.of(2000, i, 1)
                         .format(DateTimeFormatter.ofPattern("LLLL", CS));
+                monthNames[i - 1] = MonthNameFormatter.format(LocalDate.of(2000, i, 1), "LLLL");
             }
             monthSelector.setModel(new DefaultComboBoxModel<>(monthNames));
             for (int year = MINIMUM_DATE.getYear(); year <= LocalDate.now().getYear(); year++) {
@@ -139,7 +140,7 @@ public final class RangeSelectionDialog extends JDialog {
         LocalDate today = LocalDate.now();
         if ("Den".equals(range) || "Týden".equals(range)) {
             YearMonth month = YearMonth.from(view);
-            title.setText(month.format(DateTimeFormatter.ofPattern("LLLL yyyy", CS)));
+            title.setText(MonthNameFormatter.format(month.atDay(1), "LLLL yyyy"));
             grid.setLayout(new GridLayout(0, 7, 4, 4));
             for (String day : new String[] {"Po", "Út", "St", "Čt", "Pá", "So", "Ne"})
                 grid.add(new JLabel(day, SwingConstants.CENTER));
@@ -157,7 +158,7 @@ public final class RangeSelectionDialog extends JDialog {
                 LocalDate date = LocalDate.of(view.getYear(), month, 1);
                 boolean valid = !YearMonth.from(date).isBefore(YearMonth.from(MINIMUM_DATE))
                         && !YearMonth.from(date).isAfter(YearMonth.from(today));
-                addChoice(date.format(DateTimeFormatter.ofPattern("MMM", CS)), date, valid);
+                addChoice(MonthNameFormatter.format(date, "MMM"), date, valid);
             }
         } else {
             int start = Math.floorDiv(view.getYear(), 12) * 12;
@@ -194,6 +195,13 @@ public final class RangeSelectionDialog extends JDialog {
             dispose();
         });
         grid.add(button);
+    }
+
+    private static String capitalizeMonth(String text) {
+        if (text == null || text.isEmpty()) return text;
+        int first = text.codePointAt(0);
+        return new StringBuilder().appendCodePoint(Character.toTitleCase(first))
+                .append(text.substring(Character.charCount(first))).toString();
     }
 
     private LocalDate normalize(LocalDate date) {

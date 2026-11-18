@@ -99,7 +99,7 @@ public final class OverviewPanel extends JPanel {
             case "Měsíc" -> {
                 start = selectedDate.withDayOfMonth(1);
                 end = start.plusMonths(1).minusDays(1);
-                title = selectedDate.format(DateTimeFormatter.ofPattern("LLLL uuuu", new Locale("cs", "CZ")));
+                title = MonthNameFormatter.format(selectedDate, "LLLL uuuu");
             }
             case "Rok" -> {
                 start = selectedDate.withDayOfYear(1);
