@@ -32,6 +32,7 @@ public final class OverviewPanel extends JPanel {
 
     private final JLabel heading = new JLabel();
     private final JLabel total = new JLabel();
+    private final JLabel comparison = new JLabel();
     private final JPanel expenseList = new JPanel();
     private final PieChartPanel pieChart = new PieChartPanel();
     private final JButton addExpenseButton = new JButton("Vložit výdaj");
@@ -44,14 +45,18 @@ public final class OverviewPanel extends JPanel {
 
         heading.setFont(heading.getFont().deriveFont(Font.BOLD, 24f));
         total.setFont(total.getFont().deriveFont(Font.BOLD, 17f));
+        comparison.setFont(comparison.getFont().deriveFont(Font.BOLD, 14f));
 
         JPanel header = new JPanel();
         header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
         heading.setAlignmentX(LEFT_ALIGNMENT);
         total.setAlignmentX(LEFT_ALIGNMENT);
+        comparison.setAlignmentX(LEFT_ALIGNMENT);
         header.add(heading);
         header.add(Box.createVerticalStrut(5));
         header.add(total);
+        header.add(Box.createVerticalStrut(3));
+        header.add(comparison);
         add(header, BorderLayout.NORTH);
 
         expenseList.setLayout(new BoxLayout(expenseList, BoxLayout.Y_AXIS));
@@ -112,11 +117,39 @@ public final class OverviewPanel extends JPanel {
                 title = selectedDate.format(DATE_HEADING_FORMAT);
             }
         }
+        LocalDate previousStart;
+        LocalDate previousEnd;
+        String comparisonPeriod;
+        switch (range) {
+            case "Týden" -> {
+                previousStart = start.minusWeeks(1);
+                previousEnd = end.minusWeeks(1);
+                comparisonPeriod = "předchozímu týdnu";
+            }
+            case "Měsíc" -> {
+                previousStart = start.minusMonths(1);
+                previousEnd = start.minusDays(1);
+                comparisonPeriod = "předchozímu měsíci";
+            }
+            case "Rok" -> {
+                previousStart = start.minusYears(1);
+                previousEnd = start.minusDays(1);
+                comparisonPeriod = "předchozímu roku";
+            }
+            default -> {
+                previousStart = start.minusDays(1);
+                previousEnd = previousStart;
+                comparisonPeriod = "předchozímu dni";
+            }
+        }
+
         heading.setText(title);
         expenseList.removeAll();
         try {
             List<DatabaseManipulator.ExpenseOverview> expenses =
                     DatabaseManipulator.getExpensesBetween(start, end);
+            List<DatabaseManipulator.ExpenseOverview> previousExpenses =
+                    DatabaseManipulator.getExpensesBetween(previousStart, previousEnd);
             pieChart.setExpenses(expenses);
             BigDecimal sum = BigDecimal.ZERO;
             for (DatabaseManipulator.ExpenseOverview expense : expenses) {
@@ -125,6 +158,8 @@ public final class OverviewPanel extends JPanel {
                 expenseList.add(Box.createVerticalStrut(7));
             }
             total.setText("Celkem: " + formatCurrency(sum));
+            BigDecimal previousSum = sumExpenses(previousExpenses);
+            updateComparison(sum, previousSum, comparisonPeriod);
             if (expenses.isEmpty()) {
                 JLabel empty = new JLabel("Pro vybrané období nejsou evidovány žádné výdaje.");
                 empty.setBorder(BorderFactory.createEmptyBorder(10, 4, 10, 4));
@@ -133,12 +168,60 @@ public final class OverviewPanel extends JPanel {
         } catch (Exception exception) {
             pieChart.setExpenses(List.of());
             total.setText("Výdaje se nepodařilo načíst.");
+            comparison.setText("");
             JOptionPane.showMessageDialog(this,
                     "Výdaje se nepodařilo načíst.\n" + exception.getMessage(),
                     "Chyba", JOptionPane.ERROR_MESSAGE);
         }
         expenseList.revalidate();
         expenseList.repaint();
+    }
+
+    private static BigDecimal sumExpenses(
+            List<DatabaseManipulator.ExpenseOverview> expenses) {
+        return expenses.stream()
+                .map(DatabaseManipulator.ExpenseOverview::amount)
+                .filter(java.util.Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private void updateComparison(BigDecimal current, BigDecimal previous,
+            String previousPeriod) {
+        BigDecimal difference = current.subtract(previous);
+        int direction = difference.signum();
+
+        if (direction == 0) {
+            comparison.setForeground(new Color(108, 117, 125));
+            comparison.setText("● Beze změny (0,00 %) oproti " + previousPeriod);
+            return;
+        }
+
+        String arrow = direction > 0 ? "▲" : "▼";
+        comparison.setForeground(direction > 0
+                ? new Color(220, 53, 69) : new Color(25, 135, 84));
+
+        StringBuilder text = new StringBuilder(arrow)
+                .append(' ')
+                .append(direction > 0 ? "+" : "-")
+                .append(formatCurrency(difference.abs()));
+        if (previous.signum() != 0) {
+            BigDecimal percentage = difference
+                    .divide(previous.abs(), 4, java.math.RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100));
+            text.append(" (")
+                    .append(direction > 0 ? "+" : "")
+                    .append(formatPercentage(percentage))
+                    .append(")");
+        }
+        text.append(" oproti ").append(previousPeriod);
+        comparison.setText(text.toString());
+    }
+
+    private static String formatPercentage(BigDecimal percentage) {
+        NumberFormat format = NumberFormat.getNumberInstance(new Locale("cs", "CZ"));
+        format.setMinimumFractionDigits(2);
+        format.setMaximumFractionDigits(2);
+        return format.format(percentage) + " %";
     }
 
     private JPanel createExpenseRow(DatabaseManipulator.ExpenseOverview expense) {
@@ -150,8 +233,8 @@ public final class OverviewPanel extends JPanel {
         row.setBackground(background);
         row.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(background.darker(), 1, true),
-                BorderFactory.createEmptyBorder(10, 14, 10, 14)));
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 46));
+                BorderFactory.createEmptyBorder(4, 14, 4, 14)));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 35));
 
         JLabel date = createLabel(formatExpenseDate(expense.date()), SwingConstants.LEFT, foreground);
         JLabel category = createLabel(expense.categoryName(), SwingConstants.LEFT, foreground);

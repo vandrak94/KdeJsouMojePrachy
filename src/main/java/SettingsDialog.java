@@ -110,10 +110,10 @@ public final class SettingsDialog extends JDialog {
         double lum = .2126 * background.getRed() + .7152 * background.getGreen() + .0722 * background.getBlue();
         JPanel row = new JPanel(new BorderLayout(12, 0));
         row.setOpaque(true); row.setBackground(background); row.setAlignmentX(LEFT_ALIGNMENT);
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 46));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 35));
         row.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(background.darker(), 1, true),
-                BorderFactory.createEmptyBorder(10, 14, 10, 14)));
+                BorderFactory.createEmptyBorder(4, 14, 4, 14)));
         JLabel name = new JLabel(category.name()); name.setForeground(lum < 145 ? Color.WHITE : Color.BLACK);
         row.add(name, BorderLayout.CENTER);
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0)); actions.setOpaque(false);
