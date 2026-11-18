@@ -11,15 +11,12 @@ public final class SettingsDialog extends JDialog {
     private final boolean forcedCategoryRepair;
     private boolean duplicatesRemain;
 
-    public SettingsDialog(Frame owner) {
-        this(owner, false);
-    }
+    public SettingsDialog(Frame owner) { this(owner, false); }
 
     public SettingsDialog(Frame owner, boolean forcedCategoryRepair) {
         super(owner, "Nastavení", true);
         this.forcedCategoryRepair = forcedCategoryRepair;
-        setDefaultCloseOperation(forcedCategoryRepair
-                ? WindowConstants.DO_NOTHING_ON_CLOSE : WindowConstants.DISPOSE_ON_CLOSE);
+        setDefaultCloseOperation(forcedCategoryRepair ? DO_NOTHING_ON_CLOSE : DISPOSE_ON_CLOSE);
         setMinimumSize(new Dimension(650, 470));
         setLayout(new BorderLayout());
         tabs.addTab("Databáze", createDatabaseTab());
@@ -29,14 +26,11 @@ public final class SettingsDialog extends JDialog {
             tabs.setSelectedIndex(1);
             tabs.setEnabledAt(0, false);
             addWindowListener(new WindowAdapter() {
-                @Override public void windowClosing(WindowEvent event) {
-                    if (duplicatesRemain) {
-                        JOptionPane.showMessageDialog(SettingsDialog.this,
-                                "Nastavení nelze zavřít, dokud mají dvě nebo více kategorií stejnou barvu.",
-                                "Duplicitní barvy kategorií", JOptionPane.WARNING_MESSAGE);
-                    } else {
-                        dispose();
-                    }
+                @Override public void windowClosing(WindowEvent e) {
+                    if (duplicatesRemain) JOptionPane.showMessageDialog(SettingsDialog.this,
+                            "Nastavení nelze zavřít, dokud mají kategorie stejné barvy.",
+                            "Duplicitní barvy", JOptionPane.WARNING_MESSAGE);
+                    else dispose();
                 }
             });
         }
@@ -74,9 +68,11 @@ public final class SettingsDialog extends JDialog {
         controls.add(add); content.add(controls, BorderLayout.NORTH);
         categoryLabels = new JPanel();
         categoryLabels.setLayout(new BoxLayout(categoryLabels, BoxLayout.Y_AXIS));
-        categoryLabels.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+        categoryLabels.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 12));
         JPanel top = new JPanel(new BorderLayout()); top.add(categoryLabels, BorderLayout.NORTH);
-        JScrollPane scroll = new JScrollPane(top); scroll.setBorder(BorderFactory.createEmptyBorder());
+        JScrollPane scroll = new JScrollPane(top);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         scroll.getVerticalScrollBar().setUnitIncrement(16);
         content.add(scroll, BorderLayout.CENTER); panel.add(content, BorderLayout.CENTER);
         refreshCategoryLabels();
@@ -94,12 +90,12 @@ public final class SettingsDialog extends JDialog {
                 categoryLabels.add(Box.createVerticalStrut(7));
             }
             if (forcedCategoryRepair && !duplicatesRemain) {
-                setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+                setDefaultCloseOperation(DISPOSE_ON_CLOSE);
                 tabs.setEnabledAt(0, true);
             }
-        } catch (SQLException exception) {
+        } catch (SQLException ex) {
             duplicatesRemain = forcedCategoryRepair;
-            JOptionPane.showMessageDialog(this, "Kategorie se nepodařilo načíst.\n" + exception.getMessage(),
+            JOptionPane.showMessageDialog(this, "Kategorie se nepodařilo načíst.\n" + ex.getMessage(),
                     "Chyba", JOptionPane.ERROR_MESSAGE);
         }
         categoryLabels.revalidate(); categoryLabels.repaint();

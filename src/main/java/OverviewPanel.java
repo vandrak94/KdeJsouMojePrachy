@@ -10,7 +10,19 @@ import java.time.format.DateTimeFormatter;
 import java.time.DayOfWeek;
 import java.time.temporal.TemporalAdjusters;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JPopupMenu;
+import javax.swing.JTextField;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.DefaultComboBoxModel;
+import javax.swing.DefaultListCellRenderer;
+import javax.swing.JList;
+import java.awt.Component;
+import java.awt.FlowLayout;
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.Locale;
 
 import javax.swing.BorderFactory;
@@ -36,6 +48,15 @@ public final class OverviewPanel extends JPanel {
     private final JPanel expenseList = new JPanel();
     private final PieChartPanel pieChart = new PieChartPanel();
     private final JButton addExpenseButton = new JButton("Vložit výdaj");
+    private final JButton categoryFilter = new JButton("Vše ▾");
+    private final JPopupMenu categoryPopup = new JPopupMenu();
+    private final JTextField noteFilter = new JTextField(18);
+    private final Set<Integer> selectedCategoryIds = new LinkedHashSet<>();
+    private List<DatabaseManipulator.ExpenseOverview> currentExpenses = List.of();
+    private boolean updatingFilter;
+    private LocalDate previousStart;
+    private LocalDate previousEnd;
+    private String previousPeriod;
     private String currentRange = "Den";
     private LocalDate currentDate = LocalDate.now();
 
@@ -51,17 +72,19 @@ public final class OverviewPanel extends JPanel {
         header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
         heading.setAlignmentX(LEFT_ALIGNMENT);
         total.setAlignmentX(LEFT_ALIGNMENT);
-        comparison.setAlignmentX(LEFT_ALIGNMENT);
         header.add(heading);
         header.add(Box.createVerticalStrut(5));
         header.add(total);
         header.add(Box.createVerticalStrut(3));
+        comparison.setAlignmentX(LEFT_ALIGNMENT);
         header.add(comparison);
         add(header, BorderLayout.NORTH);
 
         expenseList.setLayout(new BoxLayout(expenseList, BoxLayout.Y_AXIS));
         JScrollPane scrollPane = new JScrollPane(expenseList);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+        expenseList.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 8));
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
         JPanel overviewContent = new JPanel(new BorderLayout(16, 0));
         overviewContent.add(scrollPane, BorderLayout.CENTER);
@@ -69,9 +92,49 @@ public final class OverviewPanel extends JPanel {
         chartContainer.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(210, 210, 210), 1, true),
                 BorderFactory.createEmptyBorder(8, 8, 8, 8)));
+        setupFilter();
+        JPanel filterHeader = new JPanel(new BorderLayout(10, 0));
+        JPanel categoryControls = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        categoryControls.add(new JLabel("Kategorie: "));
+        categoryControls.add(categoryFilter);
+        filterHeader.add(categoryControls, BorderLayout.WEST);
+        JPanel noteContainer = new JPanel(new BorderLayout(0, 0));
+        noteContainer.add(noteFilter, BorderLayout.CENTER);
+        JButton clearNoteButton = new JButton("×");
+        clearNoteButton.setToolTipText("Vymazat filtr poznámky");
+        clearNoteButton.setFocusable(false);
+        clearNoteButton.setMargin(new java.awt.Insets(0, 6, 0, 6));
+        clearNoteButton.addActionListener(e -> noteFilter.setText(""));
+        noteContainer.add(clearNoteButton, BorderLayout.EAST);
+        JPanel noteControls = new JPanel(new BorderLayout(6, 0));
+        noteControls.add(new JLabel("Poznámka:"), BorderLayout.WEST);
+        noteControls.add(noteContainer, BorderLayout.CENTER);
+        filterHeader.add(noteControls, BorderLayout.CENTER);
+        noteFilter.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { renderFilteredExpenses(); }
+            public void removeUpdate(DocumentEvent e) { renderFilteredExpenses(); }
+            public void changedUpdate(DocumentEvent e) { renderFilteredExpenses(); }
+        });
+        JPanel listContainer = new JPanel(new BorderLayout(0, 8));
+        listContainer.add(filterHeader, BorderLayout.NORTH);
+        listContainer.add(scrollPane, BorderLayout.CENTER);
+        overviewContent.remove(scrollPane);
+        overviewContent.add(listContainer, BorderLayout.CENTER);
         chartContainer.add(pieChart, BorderLayout.CENTER);
         overviewContent.add(chartContainer, BorderLayout.EAST);
         add(overviewContent, BorderLayout.CENTER);
+        setFocusable(true);
+        java.awt.event.MouseAdapter clearNoteFocus = new java.awt.event.MouseAdapter() {
+            @Override public void mousePressed(java.awt.event.MouseEvent event) {
+                requestFocusInWindow();
+            }
+        };
+        addMouseListener(clearNoteFocus);
+        header.addMouseListener(clearNoteFocus);
+        overviewContent.addMouseListener(clearNoteFocus);
+        listContainer.addMouseListener(clearNoteFocus);
+        chartContainer.addMouseListener(clearNoteFocus);
+        scrollPane.getViewport().addMouseListener(clearNoteFocus);
 
         addExpenseButton.setToolTipText("Vložit výdaj");
         addExpenseButton.setFocusable(false);
@@ -117,58 +180,30 @@ public final class OverviewPanel extends JPanel {
                 title = selectedDate.format(DATE_HEADING_FORMAT);
             }
         }
-        LocalDate previousStart;
-        LocalDate previousEnd;
-        String comparisonPeriod;
-        switch (range) {
-            case "Týden" -> {
-                previousStart = start.minusWeeks(1);
-                previousEnd = end.minusWeeks(1);
-                comparisonPeriod = "předchozímu týdnu";
-            }
-            case "Měsíc" -> {
-                previousStart = start.minusMonths(1);
-                previousEnd = start.minusDays(1);
-                comparisonPeriod = "předchozímu měsíci";
-            }
-            case "Rok" -> {
-                previousStart = start.minusYears(1);
-                previousEnd = start.minusDays(1);
-                comparisonPeriod = "předchozímu roku";
-            }
-            default -> {
-                previousStart = start.minusDays(1);
-                previousEnd = previousStart;
-                comparisonPeriod = "předchozímu dni";
-            }
-        }
-
+        previousStart = switch (range) {
+            case "Týden" -> start.minusWeeks(1);
+            case "Měsíc" -> start.minusMonths(1);
+            case "Rok" -> start.minusYears(1);
+            default -> start.minusDays(1);
+        };
+        previousEnd = start.minusDays(1);
+        previousPeriod = switch (range) {
+            case "Týden" -> "předchozímu týdnu";
+            case "Měsíc" -> "předchozímu měsíci";
+            case "Rok" -> "předchozímu roku";
+            default -> "předchozímu dni";
+        };
         heading.setText(title);
-        expenseList.removeAll();
         try {
-            List<DatabaseManipulator.ExpenseOverview> expenses =
-                    DatabaseManipulator.getExpensesBetween(start, end);
-            List<DatabaseManipulator.ExpenseOverview> previousExpenses =
-                    DatabaseManipulator.getExpensesBetween(previousStart, previousEnd);
-            pieChart.setExpenses(expenses);
-            BigDecimal sum = BigDecimal.ZERO;
-            for (DatabaseManipulator.ExpenseOverview expense : expenses) {
-                if (expense.amount() != null) sum = sum.add(expense.amount());
-                expenseList.add(createExpenseRow(expense));
-                expenseList.add(Box.createVerticalStrut(7));
-            }
-            total.setText("Celkem: " + formatCurrency(sum));
-            BigDecimal previousSum = sumExpenses(previousExpenses);
-            updateComparison(sum, previousSum, comparisonPeriod);
-            if (expenses.isEmpty()) {
-                JLabel empty = new JLabel("Pro vybrané období nejsou evidovány žádné výdaje.");
-                empty.setBorder(BorderFactory.createEmptyBorder(10, 4, 10, 4));
-                expenseList.add(empty);
-            }
+            currentExpenses = DatabaseManipulator.getExpensesBetween(start, end);
+            reloadFilterCategories();
+            renderFilteredExpenses();
         } catch (Exception exception) {
-            pieChart.setExpenses(List.of());
-            total.setText("Výdaje se nepodařilo načíst.");
+            currentExpenses = List.of();
             comparison.setText("");
+            total.setText("Výdaje se nepodařilo načíst.");
+            pieChart.setExpenses(List.of());
+            expenseList.removeAll();
             JOptionPane.showMessageDialog(this,
                     "Výdaje se nepodařilo načíst.\n" + exception.getMessage(),
                     "Chyba", JOptionPane.ERROR_MESSAGE);
@@ -177,51 +212,120 @@ public final class OverviewPanel extends JPanel {
         expenseList.repaint();
     }
 
-    private static BigDecimal sumExpenses(
-            List<DatabaseManipulator.ExpenseOverview> expenses) {
-        return expenses.stream()
-                .map(DatabaseManipulator.ExpenseOverview::amount)
-                .filter(java.util.Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    private void setupFilter() {
+        categoryFilter.setPreferredSize(new Dimension(170, 25));
+        categoryFilter.setMargin(new java.awt.Insets(1, 7, 1, 7));
+        categoryFilter.setFocusable(false);
+        categoryFilter.addActionListener(e ->
+                categoryPopup.show(categoryFilter, 0, categoryFilter.getHeight()));
+        categoryPopup.setLayout(new BoxLayout(categoryPopup, BoxLayout.Y_AXIS));
     }
 
-    private void updateComparison(BigDecimal current, BigDecimal previous,
-            String previousPeriod) {
-        BigDecimal difference = current.subtract(previous);
-        int direction = difference.signum();
+    private void reloadFilterCategories() throws java.sql.SQLException {
+        List<DatabaseManipulator.Category> categories = DatabaseManipulator.getCategories();
+        Set<Integer> validIds = new LinkedHashSet<>();
+        for (DatabaseManipulator.Category category : categories) validIds.add(category.id());
+        selectedCategoryIds.retainAll(validIds);
+        categoryPopup.removeAll();
 
-        if (direction == 0) {
+        JCheckBox all = new JCheckBox("Vše", selectedCategoryIds.isEmpty());
+        all.setBorder(BorderFactory.createEmptyBorder(5, 8, 5, 8));
+        all.addActionListener(e -> {
+            selectedCategoryIds.clear();
+            renderFilteredExpenses();
+            categoryPopup.setVisible(false);
+            reloadCheckboxStates();
+        });
+        categoryPopup.add(all);
+
+        for (DatabaseManipulator.Category category : categories) {
+            JCheckBox box = new JCheckBox(category.name(), selectedCategoryIds.contains(category.id()));
+            box.putClientProperty("categoryId", category.id());
+            box.setBorder(BorderFactory.createEmptyBorder(5, 8, 5, 8));
+            box.addActionListener(e -> {
+                if (!selectedCategoryIds.add(category.id())) selectedCategoryIds.remove(category.id());
+                reloadCheckboxStates();
+                renderFilteredExpenses();
+                // JCheckBox in a popup is not a menu item: popup remains open.
+            });
+            categoryPopup.add(box);
+        }
+        reloadCheckboxStates();
+    }
+
+    private void reloadCheckboxStates() {
+        for (Component component : categoryPopup.getComponents()) {
+            if (component instanceof JCheckBox box) {
+                Object id = box.getClientProperty("categoryId");
+                box.setSelected(id == null ? selectedCategoryIds.isEmpty()
+                        : selectedCategoryIds.contains((Integer) id));
+            }
+        }
+        categoryFilter.setText(selectedCategoryIds.isEmpty()
+                ? "Vše ▾" : "Vybráno: " + selectedCategoryIds.size() + " ▾");
+    }
+
+    private void renderFilteredExpenses() {
+        String noteQuery = noteFilter.getText().trim().toLowerCase(Locale.ROOT);
+        List<DatabaseManipulator.ExpenseOverview> filtered = currentExpenses.stream()
+                .filter(e -> selectedCategoryIds.isEmpty()
+                        || selectedCategoryIds.contains(e.categoryId()))
+                .filter(e -> noteQuery.isEmpty() || (e.note() != null
+                        && e.note().toLowerCase(Locale.ROOT).contains(noteQuery)))
+                .toList();
+        expenseList.removeAll();
+        BigDecimal sum = BigDecimal.ZERO;
+        for (DatabaseManipulator.ExpenseOverview expense : filtered) {
+            if (expense.amount() != null) sum = sum.add(expense.amount());
+            expenseList.add(createExpenseRow(expense));
+            expenseList.add(Box.createVerticalStrut(7));
+        }
+        total.setText("Celkem: " + formatCurrency(sum));
+        pieChart.setExpenses(filtered);
+        try {
+            List<DatabaseManipulator.ExpenseOverview> previous =
+                    DatabaseManipulator.getExpensesBetween(previousStart, previousEnd);
+            BigDecimal previousSum = BigDecimal.ZERO;
+            for (DatabaseManipulator.ExpenseOverview expense : previous) {
+                if ((selectedCategoryIds.isEmpty() || selectedCategoryIds.contains(expense.categoryId()))
+                        && (noteQuery.isEmpty() || (expense.note() != null
+                                && expense.note().toLowerCase(Locale.ROOT).contains(noteQuery)))
+                        && expense.amount() != null) previousSum = previousSum.add(expense.amount());
+            }
+            updateComparison(sum, previousSum);
+        } catch (Exception ex) {
+            comparison.setText("Porovnání není dostupné");
+        }
+        if (filtered.isEmpty()) {
+            expenseList.add(new JLabel("Pro vybrané období a kategorie nejsou evidovány žádné výdaje."));
+        }
+        expenseList.revalidate();
+        expenseList.repaint();
+    }
+
+    private void updateComparison(BigDecimal current, BigDecimal previous) {
+        BigDecimal difference = current.subtract(previous);
+        int sign = difference.signum();
+        if (sign == 0) {
             comparison.setForeground(new Color(108, 117, 125));
             comparison.setText("● Beze změny (0,00 %) oproti " + previousPeriod);
             return;
         }
-
-        String arrow = direction > 0 ? "▲" : "▼";
-        comparison.setForeground(direction > 0
-                ? new Color(220, 53, 69) : new Color(25, 135, 84));
-
-        StringBuilder text = new StringBuilder(arrow)
-                .append(' ')
-                .append(direction > 0 ? "+" : "-")
-                .append(formatCurrency(difference.abs()));
+        comparison.setForeground(sign > 0 ? new Color(220, 53, 69) : new Color(25, 135, 84));
+        String text = (sign > 0 ? "▲ +" : "▼ -") + formatCurrency(difference.abs());
         if (previous.signum() != 0) {
-            BigDecimal percentage = difference
-                    .divide(previous.abs(), 4, java.math.RoundingMode.HALF_UP)
-                    .multiply(BigDecimal.valueOf(100));
-            text.append(" (")
-                    .append(direction > 0 ? "+" : "")
-                    .append(formatPercentage(percentage))
-                    .append(")");
+            java.text.NumberFormat format = java.text.NumberFormat.getNumberInstance(new Locale("cs", "CZ"));
+            format.setMinimumFractionDigits(2);
+            format.setMaximumFractionDigits(2);
+            BigDecimal percent = difference.multiply(BigDecimal.valueOf(100))
+                    .divide(previous.abs(), 2, java.math.RoundingMode.HALF_UP);
+            text += " (" + (sign > 0 ? "+" : "") + format.format(percent) + " %)";
         }
-        text.append(" oproti ").append(previousPeriod);
-        comparison.setText(text.toString());
+        comparison.setText(text + " oproti " + previousPeriod);
     }
 
-    private static String formatPercentage(BigDecimal percentage) {
-        NumberFormat format = NumberFormat.getNumberInstance(new Locale("cs", "CZ"));
-        format.setMinimumFractionDigits(2);
-        format.setMaximumFractionDigits(2);
-        return format.format(percentage) + " %";
+    private record FilterItem(int id, String name, boolean all) {
+        @Override public String toString() { return name; }
     }
 
     private JPanel createExpenseRow(DatabaseManipulator.ExpenseOverview expense) {
