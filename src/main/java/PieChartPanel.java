@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.NumberFormat;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -42,6 +43,8 @@ public final class PieChartPanel extends JPanel {
                     previous == null ? amount : previous.amount().add(amount)));
         }
         slices = new ArrayList<>(aggregated.values());
+        slices.sort(Comparator.comparing(Slice::amount).reversed()
+                .thenComparing(Slice::name, String.CASE_INSENSITIVE_ORDER));
         repaint();
     }
 
