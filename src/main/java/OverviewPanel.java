@@ -98,17 +98,46 @@ public final class OverviewPanel extends JPanel {
         categoryControls.add(new JLabel("Kategorie: "));
         categoryControls.add(categoryFilter);
         filterHeader.add(categoryControls, BorderLayout.WEST);
-        JPanel noteContainer = new JPanel(new BorderLayout(0, 0));
-        noteContainer.add(noteFilter, BorderLayout.CENTER);
-        JButton clearNoteButton = new JButton("×");
+        JButton clearNoteButton = new JButton() {
+            @Override protected void paintComponent(java.awt.Graphics graphics) {
+                // Only the circular icon responds visually; no rectangular button hover.
+                super.paintComponent(graphics);
+                if (getModel().isRollover() || getModel().isPressed()) {
+                    java.awt.Graphics2D g = (java.awt.Graphics2D) graphics.create();
+                    try {
+                        g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                                java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                        int diameter = 21;
+                        int x = (getWidth() - diameter) / 2;
+                        int y = (getHeight() - diameter) / 2;
+                        g.setColor(getModel().isPressed()
+                                ? new Color(85, 125, 190, 90) : new Color(100, 140, 200, 50));
+                        g.fillOval(x, y, diameter, diameter);
+                        g.setColor(new Color(95, 135, 195, 190));
+                        g.setStroke(new java.awt.BasicStroke(1.2f));
+                        g.drawOval(x, y, diameter - 1, diameter - 1);
+                    } finally { g.dispose(); }
+                }
+                // Render the icon last so it stays visible over the hover circle.
+                javax.swing.Icon icon = getIcon();
+                if (icon != null) icon.paintIcon(this, graphics,
+                        (getWidth() - icon.getIconWidth()) / 2,
+                        (getHeight() - icon.getIconHeight()) / 2);
+            }
+        };
+        clearNoteButton.setIcon(new ClearCircleIcon(15));
         clearNoteButton.setToolTipText("Vymazat filtr poznámky");
         clearNoteButton.setFocusable(false);
-        clearNoteButton.setMargin(new java.awt.Insets(0, 6, 0, 6));
+        clearNoteButton.setBorderPainted(false);
+        clearNoteButton.setContentAreaFilled(false);
+        clearNoteButton.setOpaque(false);
+        clearNoteButton.setRolloverEnabled(true);
+        clearNoteButton.setMargin(new java.awt.Insets(0, 4, 0, 4));
         clearNoteButton.addActionListener(e -> noteFilter.setText(""));
-        noteContainer.add(clearNoteButton, BorderLayout.EAST);
+        noteFilter.putClientProperty("JTextField.trailingComponent", clearNoteButton);
         JPanel noteControls = new JPanel(new BorderLayout(6, 0));
         noteControls.add(new JLabel("Poznámka:"), BorderLayout.WEST);
-        noteControls.add(noteContainer, BorderLayout.CENTER);
+        noteControls.add(noteFilter, BorderLayout.CENTER);
         filterHeader.add(noteControls, BorderLayout.CENTER);
         noteFilter.getDocument().addDocumentListener(new DocumentListener() {
             public void insertUpdate(DocumentEvent e) { renderFilteredExpenses(); }
@@ -322,6 +351,35 @@ public final class OverviewPanel extends JPanel {
             text += " (" + (sign > 0 ? "+" : "") + format.format(percent) + " %)";
         }
         comparison.setText(text + " oproti " + previousPeriod);
+    }
+
+    /** Malá vektorová ikona kruhu s křížkem. */
+    private static final class ClearCircleIcon implements javax.swing.Icon {
+        private final int size;
+        ClearCircleIcon(int size) { this.size = size; }
+        @Override public int getIconWidth() { return size; }
+        @Override public int getIconHeight() { return size; }
+        @Override public void paintIcon(Component component, java.awt.Graphics graphics, int x, int y) {
+            java.awt.Graphics2D g = (java.awt.Graphics2D) graphics.create();
+            try {
+                g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                        java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setColor(new Color(135, 135, 135));
+                g.fillOval(x, y, size, size);
+                g.setColor(Color.WHITE);
+                g.setStroke(new java.awt.BasicStroke(1.6f, java.awt.BasicStroke.CAP_ROUND,
+                        java.awt.BasicStroke.JOIN_ROUND));
+                int centerX = x + size / 2;
+                int centerY = y + size / 2;
+                int halfCross = 3;
+
+                g.drawLine(centerX - halfCross, centerY - halfCross,
+                        centerX + halfCross, centerY + halfCross);
+
+                g.drawLine(centerX + halfCross, centerY - halfCross,
+                        centerX - halfCross, centerY + halfCross);
+            } finally { g.dispose(); }
+        }
     }
 
     private record FilterItem(int id, String name, boolean all) {
