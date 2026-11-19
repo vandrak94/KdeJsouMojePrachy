@@ -10,7 +10,19 @@ import java.time.format.DateTimeFormatter;
 import java.time.DayOfWeek;
 import java.time.temporal.TemporalAdjusters;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JPopupMenu;
+import javax.swing.JTextField;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.DefaultComboBoxModel;
+import javax.swing.DefaultListCellRenderer;
+import javax.swing.JList;
+import java.awt.Component;
+import java.awt.FlowLayout;
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.Locale;
 
 import javax.swing.BorderFactory;
@@ -32,9 +44,27 @@ public final class OverviewPanel extends JPanel {
 
     private final JLabel heading = new JLabel();
     private final JLabel total = new JLabel();
-    private final JPanel expenseList = new JPanel();
+    private final JLabel comparison = new JLabel();
+    private final JPanel expenseList = new ExpenseListPanel();
+    private static final class ExpenseListPanel extends JPanel implements javax.swing.Scrollable {
+        @Override public Dimension getPreferredScrollableViewportSize() { return getPreferredSize(); }
+        @Override public int getScrollableUnitIncrement(java.awt.Rectangle r, int orientation, int direction) { return 16; }
+        @Override public int getScrollableBlockIncrement(java.awt.Rectangle r, int orientation, int direction) { return Math.max(16, r.height - 16); }
+        @Override public boolean getScrollableTracksViewportWidth() { return true; }
+        @Override public boolean getScrollableTracksViewportHeight() { return false; }
+    }
+
     private final PieChartPanel pieChart = new PieChartPanel();
     private final JButton addExpenseButton = new JButton("Vložit výdaj");
+    private final JButton categoryFilter = new JButton("Vše ▾");
+    private final JPopupMenu categoryPopup = new JPopupMenu();
+    private final JTextField noteFilter = new JTextField(18);
+    private final Set<Integer> selectedCategoryIds = new LinkedHashSet<>();
+    private List<DatabaseManipulator.ExpenseOverview> currentExpenses = List.of();
+    private boolean updatingFilter;
+    private LocalDate previousStart;
+    private LocalDate previousEnd;
+    private String previousPeriod;
     private String currentRange = "Den";
     private LocalDate currentDate = LocalDate.now();
 
@@ -44,6 +74,7 @@ public final class OverviewPanel extends JPanel {
 
         heading.setFont(heading.getFont().deriveFont(Font.BOLD, 24f));
         total.setFont(total.getFont().deriveFont(Font.BOLD, 17f));
+        comparison.setFont(comparison.getFont().deriveFont(Font.BOLD, 14f));
 
         JPanel header = new JPanel();
         header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
@@ -52,21 +83,96 @@ public final class OverviewPanel extends JPanel {
         header.add(heading);
         header.add(Box.createVerticalStrut(5));
         header.add(total);
+        header.add(Box.createVerticalStrut(3));
+        comparison.setAlignmentX(LEFT_ALIGNMENT);
+        header.add(comparison);
         add(header, BorderLayout.NORTH);
 
         expenseList.setLayout(new BoxLayout(expenseList, BoxLayout.Y_AXIS));
         JScrollPane scrollPane = new JScrollPane(expenseList);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        expenseList.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 8));
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
         JPanel overviewContent = new JPanel(new BorderLayout(16, 0));
         overviewContent.add(scrollPane, BorderLayout.CENTER);
         JPanel chartContainer = new JPanel(new BorderLayout());
         chartContainer.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(210, 210, 210), 1, true),
+                BorderFactory.createLineBorder(javax.swing.UIManager.getColor("Component.borderColor"), 1, true),
                 BorderFactory.createEmptyBorder(8, 8, 8, 8)));
+        setupFilter();
+        JPanel filterHeader = new JPanel(new BorderLayout(10, 0));
+        JPanel categoryControls = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        categoryControls.add(new JLabel("Kategorie: "));
+        categoryControls.add(categoryFilter);
+        filterHeader.add(categoryControls, BorderLayout.WEST);
+        JButton clearNoteButton = new JButton() {
+            @Override protected void paintComponent(java.awt.Graphics graphics) {
+                // Only the circular icon responds visually; no rectangular button hover.
+                super.paintComponent(graphics);
+                if (getModel().isRollover() || getModel().isPressed()) {
+                    java.awt.Graphics2D g = (java.awt.Graphics2D) graphics.create();
+                    try {
+                        g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                                java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                        int diameter = 21;
+                        int x = (getWidth() - diameter) / 2;
+                        int y = (getHeight() - diameter) / 2;
+                        g.setColor(getModel().isPressed()
+                                ? new Color(85, 125, 190, 90) : new Color(100, 140, 200, 50));
+                        g.fillOval(x, y, diameter, diameter);
+                        g.setColor(new Color(95, 135, 195, 190));
+                        g.setStroke(new java.awt.BasicStroke(1.2f));
+                        g.drawOval(x, y, diameter - 1, diameter - 1);
+                    } finally { g.dispose(); }
+                }
+                // Render the icon last so it stays visible over the hover circle.
+                javax.swing.Icon icon = getIcon();
+                if (icon != null) icon.paintIcon(this, graphics,
+                        (getWidth() - icon.getIconWidth()) / 2,
+                        (getHeight() - icon.getIconHeight()) / 2);
+            }
+        };
+        clearNoteButton.setIcon(new ClearCircleIcon(15));
+        clearNoteButton.setToolTipText("Vymazat filtr poznámky");
+        clearNoteButton.setFocusable(false);
+        clearNoteButton.setBorderPainted(false);
+        clearNoteButton.setContentAreaFilled(false);
+        clearNoteButton.setOpaque(false);
+        clearNoteButton.setRolloverEnabled(true);
+        clearNoteButton.setMargin(new java.awt.Insets(0, 4, 0, 4));
+        clearNoteButton.addActionListener(e -> noteFilter.setText(""));
+        noteFilter.putClientProperty("JTextField.trailingComponent", clearNoteButton);
+        JPanel noteControls = new JPanel(new BorderLayout(6, 0));
+        noteControls.add(new JLabel("Poznámka:"), BorderLayout.WEST);
+        noteControls.add(noteFilter, BorderLayout.CENTER);
+        filterHeader.add(noteControls, BorderLayout.CENTER);
+        noteFilter.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { renderFilteredExpenses(); }
+            public void removeUpdate(DocumentEvent e) { renderFilteredExpenses(); }
+            public void changedUpdate(DocumentEvent e) { renderFilteredExpenses(); }
+        });
+        JPanel listContainer = new JPanel(new BorderLayout(0, 8));
+        listContainer.add(filterHeader, BorderLayout.NORTH);
+        listContainer.add(scrollPane, BorderLayout.CENTER);
+        overviewContent.remove(scrollPane);
+        overviewContent.add(listContainer, BorderLayout.CENTER);
         chartContainer.add(pieChart, BorderLayout.CENTER);
         overviewContent.add(chartContainer, BorderLayout.EAST);
         add(overviewContent, BorderLayout.CENTER);
+        setFocusable(true);
+        java.awt.event.MouseAdapter clearNoteFocus = new java.awt.event.MouseAdapter() {
+            @Override public void mousePressed(java.awt.event.MouseEvent event) {
+                requestFocusInWindow();
+            }
+        };
+        addMouseListener(clearNoteFocus);
+        header.addMouseListener(clearNoteFocus);
+        overviewContent.addMouseListener(clearNoteFocus);
+        listContainer.addMouseListener(clearNoteFocus);
+        chartContainer.addMouseListener(clearNoteFocus);
+        scrollPane.getViewport().addMouseListener(clearNoteFocus);
 
         addExpenseButton.setToolTipText("Vložit výdaj");
         addExpenseButton.setFocusable(false);
@@ -99,7 +205,7 @@ public final class OverviewPanel extends JPanel {
             case "Měsíc" -> {
                 start = selectedDate.withDayOfMonth(1);
                 end = start.plusMonths(1).minusDays(1);
-                title = selectedDate.format(DateTimeFormatter.ofPattern("LLLL uuuu", new Locale("cs", "CZ")));
+                title = MonthNameFormatter.format(selectedDate, "LLLL uuuu");
             }
             case "Rok" -> {
                 start = selectedDate.withDayOfYear(1);
@@ -112,33 +218,179 @@ public final class OverviewPanel extends JPanel {
                 title = selectedDate.format(DATE_HEADING_FORMAT);
             }
         }
+        previousStart = switch (range) {
+            case "Týden" -> start.minusWeeks(1);
+            case "Měsíc" -> start.minusMonths(1);
+            case "Rok" -> start.minusYears(1);
+            default -> start.minusDays(1);
+        };
+        previousEnd = start.minusDays(1);
+        previousPeriod = switch (range) {
+            case "Týden" -> "předchozímu týdnu";
+            case "Měsíc" -> "předchozímu měsíci";
+            case "Rok" -> "předchozímu roku";
+            default -> "předchozímu dni";
+        };
         heading.setText(title);
-        expenseList.removeAll();
         try {
-            List<DatabaseManipulator.ExpenseOverview> expenses =
-                    DatabaseManipulator.getExpensesBetween(start, end);
-            pieChart.setExpenses(expenses);
-            BigDecimal sum = BigDecimal.ZERO;
-            for (DatabaseManipulator.ExpenseOverview expense : expenses) {
-                if (expense.amount() != null) sum = sum.add(expense.amount());
-                expenseList.add(createExpenseRow(expense));
-                expenseList.add(Box.createVerticalStrut(7));
-            }
-            total.setText("Celkem: " + formatCurrency(sum));
-            if (expenses.isEmpty()) {
-                JLabel empty = new JLabel("Pro vybrané období nejsou evidovány žádné výdaje.");
-                empty.setBorder(BorderFactory.createEmptyBorder(10, 4, 10, 4));
-                expenseList.add(empty);
-            }
+            currentExpenses = DatabaseManipulator.getExpensesBetween(start, end);
+            reloadFilterCategories();
+            renderFilteredExpenses();
         } catch (Exception exception) {
-            pieChart.setExpenses(List.of());
+            currentExpenses = List.of();
+            comparison.setText("");
             total.setText("Výdaje se nepodařilo načíst.");
+            pieChart.setExpenses(List.of());
+            expenseList.removeAll();
             JOptionPane.showMessageDialog(this,
                     "Výdaje se nepodařilo načíst.\n" + exception.getMessage(),
                     "Chyba", JOptionPane.ERROR_MESSAGE);
         }
         expenseList.revalidate();
         expenseList.repaint();
+    }
+
+    private void setupFilter() {
+        categoryFilter.setPreferredSize(new Dimension(170, 25));
+        categoryFilter.setMargin(new java.awt.Insets(1, 7, 1, 7));
+        categoryFilter.setFocusable(false);
+        categoryFilter.addActionListener(e ->
+                categoryPopup.show(categoryFilter, 0, categoryFilter.getHeight()));
+        categoryPopup.setLayout(new BoxLayout(categoryPopup, BoxLayout.Y_AXIS));
+    }
+
+    private void reloadFilterCategories() throws java.sql.SQLException {
+        List<DatabaseManipulator.Category> categories = DatabaseManipulator.getCategories();
+        Set<Integer> validIds = new LinkedHashSet<>();
+        for (DatabaseManipulator.Category category : categories) validIds.add(category.id());
+        selectedCategoryIds.retainAll(validIds);
+        categoryPopup.removeAll();
+
+        JCheckBox all = new JCheckBox("Vše", selectedCategoryIds.isEmpty());
+        all.setBorder(BorderFactory.createEmptyBorder(5, 8, 5, 8));
+        all.addActionListener(e -> {
+            selectedCategoryIds.clear();
+            renderFilteredExpenses();
+            categoryPopup.setVisible(false);
+            reloadCheckboxStates();
+        });
+        categoryPopup.add(all);
+
+        for (DatabaseManipulator.Category category : categories) {
+            JCheckBox box = new JCheckBox(category.name(), selectedCategoryIds.contains(category.id()));
+            box.putClientProperty("categoryId", category.id());
+            box.setBorder(BorderFactory.createEmptyBorder(5, 8, 5, 8));
+            box.addActionListener(e -> {
+                if (!selectedCategoryIds.add(category.id())) selectedCategoryIds.remove(category.id());
+                reloadCheckboxStates();
+                renderFilteredExpenses();
+                // JCheckBox in a popup is not a menu item: popup remains open.
+            });
+            categoryPopup.add(box);
+        }
+        reloadCheckboxStates();
+    }
+
+    private void reloadCheckboxStates() {
+        for (Component component : categoryPopup.getComponents()) {
+            if (component instanceof JCheckBox box) {
+                Object id = box.getClientProperty("categoryId");
+                box.setSelected(id == null ? selectedCategoryIds.isEmpty()
+                        : selectedCategoryIds.contains((Integer) id));
+            }
+        }
+        categoryFilter.setText(selectedCategoryIds.isEmpty()
+                ? "Vše ▾" : "Vybráno: " + selectedCategoryIds.size() + " ▾");
+    }
+
+    private void renderFilteredExpenses() {
+        String noteQuery = noteFilter.getText().trim().toLowerCase(Locale.ROOT);
+        List<DatabaseManipulator.ExpenseOverview> filtered = currentExpenses.stream()
+                .filter(e -> selectedCategoryIds.isEmpty()
+                        || selectedCategoryIds.contains(e.categoryId()))
+                .filter(e -> noteQuery.isEmpty() || (e.note() != null
+                        && e.note().toLowerCase(Locale.ROOT).contains(noteQuery)))
+                .toList();
+        expenseList.removeAll();
+        BigDecimal sum = BigDecimal.ZERO;
+        for (DatabaseManipulator.ExpenseOverview expense : filtered) {
+            if (expense.amount() != null) sum = sum.add(expense.amount());
+            expenseList.add(createExpenseRow(expense));
+            expenseList.add(Box.createVerticalStrut(7));
+        }
+        total.setText("Celkem: " + formatCurrency(sum));
+        pieChart.setExpenses(filtered);
+        try {
+            List<DatabaseManipulator.ExpenseOverview> previous =
+                    DatabaseManipulator.getExpensesBetween(previousStart, previousEnd);
+            BigDecimal previousSum = BigDecimal.ZERO;
+            for (DatabaseManipulator.ExpenseOverview expense : previous) {
+                if ((selectedCategoryIds.isEmpty() || selectedCategoryIds.contains(expense.categoryId()))
+                        && (noteQuery.isEmpty() || (expense.note() != null
+                                && expense.note().toLowerCase(Locale.ROOT).contains(noteQuery)))
+                        && expense.amount() != null) previousSum = previousSum.add(expense.amount());
+            }
+            updateComparison(sum, previousSum);
+        } catch (Exception ex) {
+            comparison.setText("Porovnání není dostupné");
+        }
+        if (filtered.isEmpty()) {
+            expenseList.add(new JLabel("Pro vybrané období a kategorie nejsou evidovány žádné výdaje."));
+        }
+        expenseList.revalidate();
+        expenseList.repaint();
+    }
+
+    private void updateComparison(BigDecimal current, BigDecimal previous) {
+        BigDecimal difference = current.subtract(previous);
+        int sign = difference.signum();
+        if (sign == 0) {
+            comparison.setForeground(new Color(108, 117, 125));
+            comparison.setText("● Beze změny (0,00 %) oproti " + previousPeriod);
+            return;
+        }
+        comparison.setForeground(sign > 0 ? new Color(220, 53, 69) : new Color(25, 135, 84));
+        String text = (sign > 0 ? "▲ +" : "▼ -") + formatCurrency(difference.abs());
+        if (previous.signum() != 0) {
+            java.text.NumberFormat format = java.text.NumberFormat.getNumberInstance(new Locale("cs", "CZ"));
+            format.setMinimumFractionDigits(2);
+            format.setMaximumFractionDigits(2);
+            BigDecimal percent = difference.multiply(BigDecimal.valueOf(100))
+                    .divide(previous.abs(), 2, java.math.RoundingMode.HALF_UP);
+            text += " (" + (sign > 0 ? "+" : "") + format.format(percent) + " %)";
+        }
+        comparison.setText(text + " oproti " + previousPeriod);
+    }
+
+    /** Malá vektorová ikona kruhu s křížkem. */
+    private static final class ClearCircleIcon implements javax.swing.Icon {
+        private final int size;
+        ClearCircleIcon(int size) { this.size = size; }
+        @Override public int getIconWidth() { return size; }
+        @Override public int getIconHeight() { return size; }
+        @Override public void paintIcon(Component component, java.awt.Graphics graphics, int x, int y) {
+            java.awt.Graphics2D g = (java.awt.Graphics2D) graphics.create();
+            try {
+                g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                        java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setColor(new Color(135, 135, 135));
+                g.fillOval(x, y, size, size);
+                g.setColor(Color.WHITE);
+                g.setStroke(new java.awt.BasicStroke(1.6f, java.awt.BasicStroke.CAP_ROUND,
+                        java.awt.BasicStroke.JOIN_ROUND));
+                int centerX = x + size / 2;
+                int centerY = y + size / 2;
+                int halfCross = 3;
+                g.drawLine(centerX - halfCross, centerY - halfCross,
+                        centerX + halfCross, centerY + halfCross);
+                g.drawLine(centerX + halfCross, centerY - halfCross,
+                        centerX - halfCross, centerY + halfCross);
+            } finally { g.dispose(); }
+        }
+    }
+
+    private record FilterItem(int id, String name, boolean all) {
+        @Override public String toString() { return name; }
     }
 
     private JPanel createExpenseRow(DatabaseManipulator.ExpenseOverview expense) {
@@ -150,11 +402,38 @@ public final class OverviewPanel extends JPanel {
         row.setBackground(background);
         row.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(background.darker(), 1, true),
-                BorderFactory.createEmptyBorder(10, 14, 10, 14)));
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 46));
+                BorderFactory.createEmptyBorder(4, 14, 4, 14)));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 35));
 
-        JLabel date = createLabel(formatExpenseDate(expense.date()), SwingConstants.LEFT, foreground);
-        JLabel category = createLabel(expense.categoryName(), SwingConstants.LEFT, foreground);
+        String description = formatExpenseDate(expense.date()) + " | " + expense.categoryName();
+        if (expense.note() != null && !expense.note().isBlank()) {
+            description += " | " + expense.note();
+        }
+        final String fullDescription = description;
+        JLabel date = new JLabel(description, SwingConstants.LEFT) {
+            @Override public void setBounds(int x, int y, int width, int height) {
+                super.setBounds(x, y, width, height);
+                String fullText = descriptionText;
+                java.awt.FontMetrics metrics = getFontMetrics(getFont());
+                if (metrics.stringWidth(fullText) <= width) {
+                    setText(fullText);
+                    return;
+                }
+                String ellipsis = "...";
+                int available = Math.max(0, width - metrics.stringWidth(ellipsis));
+                int low = 0, high = fullText.length();
+                while (low < high) {
+                    int mid = (low + high + 1) / 2;
+                    if (metrics.stringWidth(fullText.substring(0, mid)) <= available) low = mid;
+                    else high = mid - 1;
+                }
+                setText(fullText.substring(0, low).stripTrailing() + ellipsis);
+            }
+            private final String descriptionText = fullDescription;
+        };
+        date.setForeground(foreground);
+        date.setMinimumSize(new Dimension(0, 0));
+        JLabel category = date;
         JLabel amount = createLabel(formatCurrency(expense.amount()), SwingConstants.RIGHT, foreground);
         amount.setFont(amount.getFont().deriveFont(Font.BOLD));
         String tooltip = expense.note();
@@ -168,11 +447,10 @@ public final class OverviewPanel extends JPanel {
         date.setToolTipText(tooltip);
         category.setToolTipText(tooltip);
         amount.setToolTipText(tooltip);
-        JPanel values = new JPanel(new GridLayout(1, 3, 12, 0));
+        JPanel values = new JPanel(new BorderLayout(12, 0));
         values.setOpaque(false);
-        values.add(date);
-        values.add(category);
-        values.add(amount);
+        values.add(date, BorderLayout.CENTER);
+        values.add(amount, BorderLayout.EAST);
         row.add(values, BorderLayout.CENTER);
 
         JButton editButton = new JButton("✎");
@@ -243,9 +521,9 @@ public final class OverviewPanel extends JPanel {
     private static Color parseColor(String value) {
         try {
             return value != null && value.matches("#[0-9a-fA-F]{6}")
-                    ? Color.decode(value) : new Color(225, 225, 225);
+                    ? Color.decode(value) : javax.swing.UIManager.getColor("Panel.background");
         } catch (NumberFormatException exception) {
-            return new Color(225, 225, 225);
+            return javax.swing.UIManager.getColor("Panel.background");
         }
     }
 

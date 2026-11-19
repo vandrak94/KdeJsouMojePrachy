@@ -1,6 +1,7 @@
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -10,7 +11,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
@@ -21,17 +21,19 @@ import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 
-/** Dialog pro vložení nového výdaje. */
+/** Dialog pro vložení výdaje. Poslední uložená kategorie platí pouze po dobu běhu JVM. */
 public final class AddExpenseDialog extends JDialog {
     private static final DateTimeFormatter DATE_BUTTON_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
+    private static Integer lastSavedCategoryId;
 
     private final JButton dateButton = new JButton();
     private final JComboBox<CategoryItem> categoryCombo = new JComboBox<>();
     private final JTextField amountField = new JTextField(14);
     private final JTextField noteField = new JTextField(26);
-    private LocalDate selectedDate = LocalDate.now();
+    private LocalDate selectedDate;
     private boolean saved;
 
     public AddExpenseDialog(Window owner, LocalDate initialDate) {
@@ -41,16 +43,15 @@ public final class AddExpenseDialog extends JDialog {
         setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
         setLayout(new BorderLayout(0, 12));
         setResizable(true);
-
         dateButton.addActionListener(event -> chooseDate());
         updateDateButton();
         configureCategories();
         add(createForm(), BorderLayout.CENTER);
         add(createButtons(), BorderLayout.SOUTH);
-
         pack();
         DialogSizePreferences.restoreAndTrack(this, "addExpense");
         setLocationRelativeTo(owner);
+        SwingUtilities.invokeLater(amountField::requestFocusInWindow);
     }
 
     public boolean isSaved() { return saved; }
@@ -98,14 +99,23 @@ public final class AddExpenseDialog extends JDialog {
             for (DatabaseManipulator.Category category : categories) {
                 categoryCombo.addItem(new CategoryItem(category.id(), category.name(), category.color()));
             }
+            // Restore only a category used in a successfully saved expense in this session.
+            if (lastSavedCategoryId != null) {
+                for (int i = 1; i < categoryCombo.getItemCount(); i++) {
+                    CategoryItem item = categoryCombo.getItemAt(i);
+                    if (item != null && item.id() == lastSavedCategoryId) {
+                        categoryCombo.setSelectedIndex(i);
+                        break;
+                    }
+                }
+            }
         } catch (Exception exception) {
             JOptionPane.showMessageDialog(this,
                     "Kategorie se nepodařilo načíst.\n" + exception.getMessage(),
                     "Chyba", JOptionPane.ERROR_MESSAGE);
         }
         categoryCombo.setRenderer(new DefaultListCellRenderer() {
-            @Override
-            public Component getListCellRendererComponent(JList<?> list, Object value,
+            @Override public Component getListCellRendererComponent(JList<?> list, Object value,
                     int index, boolean selected, boolean focus) {
                 JLabel label = (JLabel) super.getListCellRendererComponent(
                         list, value, index, selected, focus);
@@ -116,9 +126,7 @@ public final class AddExpenseDialog extends JDialog {
                         label.setBackground(background);
                         label.setForeground(isDark(background) ? Color.WHITE : Color.BLACK);
                     }
-                } else {
-                    label.setText("");
-                }
+                } else label.setText("");
                 return label;
             }
         });
@@ -146,9 +154,7 @@ public final class AddExpenseDialog extends JDialog {
         BigDecimal amount;
         try {
             String normalized = amountField.getText().trim().replace(',', '.');
-            if (!normalized.matches("\\d+(?:[.,]\\d{1,2})?") && !amountField.getText().trim().matches("\\d+(?:,\\d{1,2})?")) {
-                throw new NumberFormatException();
-            }
+            if (!normalized.matches("\\d+(?:\\.\\d{1,2})?")) throw new NumberFormatException();
             amount = new BigDecimal(normalized).setScale(2);
         } catch (Exception exception) {
             warning("Částka musí být číslo ve formátu 0,00.", amountField);
@@ -158,9 +164,9 @@ public final class AddExpenseDialog extends JDialog {
             warning("Částka musí být větší než 0.", amountField);
             return;
         }
-
         try {
             DatabaseManipulator.addExpense(selectedDate.toString(), category.id(), amount, noteField.getText());
+            lastSavedCategoryId = category.id();
             saved = true;
             dispose();
         } catch (Exception exception) {
@@ -179,9 +185,7 @@ public final class AddExpenseDialog extends JDialog {
         try {
             return value != null && value.matches("#[0-9a-fA-F]{6}")
                     ? Color.decode(value) : Color.LIGHT_GRAY;
-        } catch (NumberFormatException exception) {
-            return Color.LIGHT_GRAY;
-        }
+        } catch (NumberFormatException exception) { return Color.LIGHT_GRAY; }
     }
 
     private static boolean isDark(Color color) {
