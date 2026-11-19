@@ -45,7 +45,15 @@ public final class OverviewPanel extends JPanel {
     private final JLabel heading = new JLabel();
     private final JLabel total = new JLabel();
     private final JLabel comparison = new JLabel();
-    private final JPanel expenseList = new JPanel();
+    private final JPanel expenseList = new ExpenseListPanel();
+    private static final class ExpenseListPanel extends JPanel implements javax.swing.Scrollable {
+        @Override public Dimension getPreferredScrollableViewportSize() { return getPreferredSize(); }
+        @Override public int getScrollableUnitIncrement(java.awt.Rectangle r, int orientation, int direction) { return 16; }
+        @Override public int getScrollableBlockIncrement(java.awt.Rectangle r, int orientation, int direction) { return Math.max(16, r.height - 16); }
+        @Override public boolean getScrollableTracksViewportWidth() { return true; }
+        @Override public boolean getScrollableTracksViewportHeight() { return false; }
+    }
+
     private final PieChartPanel pieChart = new PieChartPanel();
     private final JButton addExpenseButton = new JButton("Vložit výdaj");
     private final JButton categoryFilter = new JButton("Vše ▾");
@@ -84,6 +92,7 @@ public final class OverviewPanel extends JPanel {
         JScrollPane scrollPane = new JScrollPane(expenseList);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         expenseList.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 8));
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
         JPanel overviewContent = new JPanel(new BorderLayout(16, 0));
@@ -396,8 +405,35 @@ public final class OverviewPanel extends JPanel {
                 BorderFactory.createEmptyBorder(4, 14, 4, 14)));
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 35));
 
-        JLabel date = createLabel(formatExpenseDate(expense.date()), SwingConstants.LEFT, foreground);
-        JLabel category = createLabel(expense.categoryName(), SwingConstants.LEFT, foreground);
+        String description = formatExpenseDate(expense.date()) + " | " + expense.categoryName();
+        if (expense.note() != null && !expense.note().isBlank()) {
+            description += " | " + expense.note();
+        }
+        final String fullDescription = description;
+        JLabel date = new JLabel(description, SwingConstants.LEFT) {
+            @Override public void setBounds(int x, int y, int width, int height) {
+                super.setBounds(x, y, width, height);
+                String fullText = descriptionText;
+                java.awt.FontMetrics metrics = getFontMetrics(getFont());
+                if (metrics.stringWidth(fullText) <= width) {
+                    setText(fullText);
+                    return;
+                }
+                String ellipsis = "...";
+                int available = Math.max(0, width - metrics.stringWidth(ellipsis));
+                int low = 0, high = fullText.length();
+                while (low < high) {
+                    int mid = (low + high + 1) / 2;
+                    if (metrics.stringWidth(fullText.substring(0, mid)) <= available) low = mid;
+                    else high = mid - 1;
+                }
+                setText(fullText.substring(0, low).stripTrailing() + ellipsis);
+            }
+            private final String descriptionText = fullDescription;
+        };
+        date.setForeground(foreground);
+        date.setMinimumSize(new Dimension(0, 0));
+        JLabel category = date;
         JLabel amount = createLabel(formatCurrency(expense.amount()), SwingConstants.RIGHT, foreground);
         amount.setFont(amount.getFont().deriveFont(Font.BOLD));
         String tooltip = expense.note();
@@ -411,11 +447,10 @@ public final class OverviewPanel extends JPanel {
         date.setToolTipText(tooltip);
         category.setToolTipText(tooltip);
         amount.setToolTipText(tooltip);
-        JPanel values = new JPanel(new GridLayout(1, 3, 12, 0));
+        JPanel values = new JPanel(new BorderLayout(12, 0));
         values.setOpaque(false);
-        values.add(date);
-        values.add(category);
-        values.add(amount);
+        values.add(date, BorderLayout.CENTER);
+        values.add(amount, BorderLayout.EAST);
         row.add(values, BorderLayout.CENTER);
 
         JButton editButton = new JButton("✎");
